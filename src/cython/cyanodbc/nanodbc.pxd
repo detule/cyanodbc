@@ -1,6 +1,7 @@
 # distutils: language = c++
 from libcpp.string cimport string
 from libcpp.vector cimport vector
+from libcpp.list cimport list as list_
 from libcpp cimport bool as bool_
 from libc.stdint cimport int16_t, int32_t
 from cpython.ref cimport PyObject
@@ -11,8 +12,35 @@ ctypedef unsigned long ULong
 cdef extern from "Python.h":
     PyObject* PyUnicode_FromWideChar(wchar_t *w, Py_ssize_t size)
 
+cdef extern from "nanodbc/nanodbc.h" namespace "nanodbc::catalog":
+   cdef cppclass tables:
+        tables(tables&)
+        bool_ next()
+        string table_catalog() const
+        string table_schema() const
+        string table_name() const
+        string table_type() const
+        string table_remarks() const
 
-
+   cdef cppclass columns:
+        columns(columns&)
+        bool_ next()
+        string table_catalog() const
+        string table_schema() const
+        string table_name() const
+        string column_name() const
+        short data_type() const
+        string type_name() const
+        long column_size() const
+        long buffer_length() const
+        short decimal_digits() const
+        short numeric_precision_radix() const
+        short nullable() const
+        string remarks() const
+        string column_default() const
+        short sql_data_type() const
+        short sql_datetime_subtype() const
+        long char_octet_length() const
 
 cdef extern from "nanodbc/nanodbc.h" namespace "nanodbc":
     ctypedef wstring wide_string
@@ -74,8 +102,22 @@ cdef extern from "nanodbc/nanodbc.h" namespace "nanodbc":
         bint next_result()
         bint operator bool()
 
-    
-
+    cdef cppclass catalog:
+        catalog(connection& conn) except+
+        tables find_tables(
+            const string& table,
+            const string& type,
+            const string& schema,
+            const string& catalog
+        ) except +
+        columns find_columns(
+            const string& column,
+            const string& table,
+            const string& schema,
+            const string& catalog
+        )
+        list_[string] list_catalogs() except+
+        list_[string] list_schemas() except+
 
     cdef cppclass connection:
 
