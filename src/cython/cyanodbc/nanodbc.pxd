@@ -3,14 +3,17 @@ from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libcpp.list cimport list as list_
 from libcpp cimport bool as bool_
-from libc.stdint cimport int16_t, int32_t
+from libcpp.cast cimport reinterpret_cast
+from libc.stdint cimport int16_t, int32_t, uint8_t
 from cpython.ref cimport PyObject
 from libc.stddef cimport wchar_t
 from .wstring cimport wstring
 ctypedef unsigned long ULong
+ctypedef char* charP
 
 cdef extern from "Python.h":
     PyObject* PyUnicode_FromWideChar(wchar_t *w, Py_ssize_t size)
+    PyObject* PyBytes_FromStringAndSize(const char *v, Py_ssize_t len)
 
 cdef extern from "nanodbc/nanodbc.h" namespace "nanodbc::catalog":
    cdef cppclass tables:
