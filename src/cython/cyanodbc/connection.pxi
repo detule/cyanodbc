@@ -11,10 +11,13 @@ cdef class Connection:
         self.c_trxn_ptr.reset(new nanodbc.transaction(self.c_cnxn))
 
     def _connect(self, dsn, username=None, password=None, long timeout=0):
-        if username and password:
-            self.c_cnxn.connect(dsn.encode(),username.encode(), password.encode(), timeout)
-        else:
-            self.c_cnxn.connect(dsn.encode(), timeout)
+        try:
+            if username and password:
+                self.c_cnxn.connect(dsn.encode(),username.encode(), password.encode(), timeout)
+            else:
+                self.c_cnxn.connect(dsn.encode(), timeout)
+        except RuntimeError as e:
+            raise ConnectError(str(e)) from e
 
     def find_tables(self, catalog, schema, table, type):
         out = []
@@ -142,6 +145,8 @@ cdef class Connection:
     def cursor(self):
         return Cursor(self)
 
+    def connected(self):
+        return self.c_cnxn.connected()
     def close(self):
         #try:
             if self.c_cnxn.connected():
@@ -152,6 +157,10 @@ cdef class Connection:
             #log(traceback.format_exc(e), logging.WARNING)
              
             
+    def execute(self, query, parameters=None):
+        crsr = self.cursor()
+        crsr.execute(query, parameters)
+        return crsr
 
     # @property
     # def transactions(self):
@@ -163,20 +172,20 @@ cdef class Connection:
         return self.c_cnxn.dbms_name().decode('UTF-8')
     
     # @property
-    # def dbms_version(self):
-    #     return self.c_cnxn.dbms_version().decode('UTF-8')
+    def dbms_version(self):
+        return self.c_cnxn.dbms_version().decode('UTF-8')
 
     # @property
     # def driver_name(self):
     #     return self.c_cnxn.driver_name().decode('UTF-8')
 
-    # @property
-    # def database_name(self):
-    #     return self.c_cnxn.database_name().decode('UTF-8')
+    @property
+    def database_name(self):
+        return self.c_cnxn.database_name().decode('UTF-8')
 
-    # @property
-    # def catalog_name(self):
-    #     return self.c_cnxn.catalog_name().decode('UTF-8')
+    @property
+    def catalog_name(self):
+        return self.c_cnxn.catalog_name().decode('UTF-8')
 
 def connect(dsn, username=None, password=None, long timeout=0):
     cnxn = Connection()
