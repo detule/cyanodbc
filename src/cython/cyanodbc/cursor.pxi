@@ -165,7 +165,10 @@ cdef class Cursor:
         cdef vector[char] nulls
 
 
-        deref(self.c_stmt_ptr).prepare(query.encode(), self.timeout)
+        try:
+            deref(self.c_stmt_ptr).prepare(query.encode(), self.timeout)
+        except RuntimeError as e:
+            raise DatabaseError("Error in Preparing: " + str(e)) from e
 
         transpose = zip(*seq_of_parameters)
         
