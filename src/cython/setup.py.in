@@ -1,8 +1,12 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 import os
 setup(name='${PROJECT_NAME}',
       version='${CYANODBC_VERSION}',
       package_dir={ '': "." },
       package_data={'':['*.so', "*.pxd", "*.pyd"]},
       include_package_data=True,
+      ext_modules = [Extension(
+            name='_cyanodbc',
+            sources=[]
+        )],
       packages=find_packages())
