@@ -1,192 +1,143 @@
+# version format
+version: "{build}"
 
-#---------------------------------#
-#      general configuration      #
-#---------------------------------#
+skip_tags: false
 
-version:  1.0.{build}-{branch}
+clone_depth: 20
 
+os: Visual Studio 2015
 
+environment:
 
-# Do not build feature branch with open Pull Requests
-skip_branch_with_pr: true
+  global:
+    # SDK v7.0 MSVC Express 2008's SetEnv.cmd script will fail if the
+    # /E:ON and /V:ON options are not enabled in the batch script intepreter
+    # See: http://stackoverflow.com/a/13751649/163740
+    CMD_IN_ENV: "cmd /E:ON /V:ON /C C:\\projects\\cyanodbc\\ci\\appveyor\\run_with_env.cmd"
+    FREETDS_BASE_URL: "https://ci.appveyor.com/api/projects/FreeTDS/freetds/artifacts"
+    FREETDS_BRANCH: "master"
+    FREETDS_JOB: "Environment%%3A%%20PLAT%%3DWin%PYTHON_ARCH%%%2C%%20WIDTH%%3D%PYTHON_ARCH%%%2C%%20VS_VERSION%%3D%VS_VER%%%2C%%20TDSVER%%3D%TDS_VER%%%2C%%20APPVEYOR_BUILD_WORKER_IMAGE%%3DVisual%%20Studio%%202017"
+    FREETDS_URL: '"%FREETDS_BASE_URL%/vs%VS_VER%_%PYTHON_ARCH%-%FREETDS_BRANCH%_withoutssl.zip?branch=%FREETDS_BRANCH%&job=%FREETDS_JOB%"'
 
-# Maximum number of concurrent jobs for the project
-max_jobs: 1
+  matrix:
 
-#---------------------------------#
-#    environment configuration    #
-#---------------------------------#
+    - PYTHON: "C:\\Python35-x64"
+      PYTHON_VERSION: "3.5.4"
+      PYTHON_ARCH: "64"
+      PY_PLATFORM: "win_amd64"
+      VS_VER: "2015"
+      TDS_VER: "7.3"
+      INSTANCENAME: "SQL2016"
 
-# Build worker image (VM template)
-image: Visual Studio 2015
-
-# scripts that are called at very beginning, before repo cloning
-init:
-  - git config --global core.autocrlf input
-
-# clone directory
-clone_folder: c:\projects\myproject
-
-# fetch repository as zip archive
-shallow_clone: true                 # default is "false"
-
-# set clone depth
-clone_depth: 5                      # clone entire repository history if not defined
-
-
-# build cache to preserve files/folders between builds
-cache:
-  - packages -> **\packages.config  # preserve "packages" directory in the root of build folder but will reset it if packages.config is modified
-  - projectA\libs
-  - node_modules                    # local npm modules
-  - '%LocalAppData%\NuGet\Cache'    # NuGet < v3
-  - '%LocalAppData%\NuGet\v3-cache' # NuGet v3
-
-# enable service required for build/tests
-services:
-  - mssql2014           # start SQL Server 2014 Express
-  - mysql               # start MySQL 5.6 service
-  - postgresql          # start PostgreSQL 9.5 service
-  - iis                 # start IIS
-
-# scripts that run after cloning repository
 install:
-  - cmd: set PATH=%PATH%;C:\Miniconda3-x64;C:\Miniconda3-x64\Scripts
-  - cmd: conda create -q -y -n py35 python=3.5
-  - cmd: call activate py35
-  - cmd: conda install -q -y cmake pytest cython ninja pytest-cov
-  - cmd: python -m pip install --upgrade pip
-  #- cmd: conda install -q -y -c conda-forge codecov
-  - cmd: call deactivate
-  - cmd: curl -fsS -o sqliteodbc_w64.exe http://www.ch-werner.de/sqliteodbc/sqliteodbc_w64.exe
-  - cmd: sqliteodbc_w64.exe /S
-  - cmd: curl -fsS -o psqlodbc_10_03_0000-x64.zip https://ftp.postgresql.org/pub/odbc/versions/msi/psqlodbc_10_03_0000-x64.zip
-  - cmd: 7z.exe x psqlodbc_10_03_0000-x64.zip
-  - cmd: msiexec /i psqlodbc_x64.msi /qn /norestart
-  - cmd: git clone https://github.com/nanodbc/nanodbc.git c:\projects\nanodbc
-  
-  
+  # Update submodules
+  - git submodule update --init --recursive
+  # If there is a newer build queued for the same PR, cancel this one.
+  # The AppVeyor 'rollout builds' option is supposed to serve the same
+  # purpose but it is problematic because it tends to cancel builds pushed
+  # directly to master instead of just PR builds (or the converse).
+  # credits: JuliaLang developers.
+  - ps: if ($env:APPVEYOR_PULL_REQUEST_NUMBER -and $env:APPVEYOR_BUILD_NUMBER -ne ((Invoke-RestMethod `
+        https://ci.appveyor.com/api/projects/$env:APPVEYOR_ACCOUNT_NAME/$env:APPVEYOR_PROJECT_SLUG/history?recordsNumber=50).builds | `
+        Where-Object pullRequestId -eq $env:APPVEYOR_PULL_REQUEST_NUMBER)[0].buildNumber) { `
+          throw "There are newer queued builds for this pull request, failing early." }
 
+  # Install Python (from the official .msi of http://python.org) and pip when
+  # not already installed.
+  - "powershell ci\\appveyor\\install.ps1"
 
+  # Prepend current Python and scripts dirs to the PATH of this build (this cannot be
+  # done from inside the powershell script as it would require to restart
+  # the parent CMD process).
+  - "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
 
+  # Upgrade to the latest version of pip to avoid it displaying warnings
+  # about it being out of date.
+  - "python -m pip install --upgrade pip"
 
+  # Install the build dependencies of the project. If some dependencies contain
+  # compiled extensions and are not provided as pre-built wheel packages,
+  # pip will build them from source using the MSVC compiler matching the
+  # target Python version and architecture
+  - "%CMD_IN_ENV% pip install -r ci\\appveyor\\dev-requirements.pip"
+  #- cmd: if %PYTHON_VERSION:~0,1% == 3 ( %CMD_IN_ENV% pip install gevent==1.1.b6 ) else ( %CMD_IN_ENV% pip install gevent )
+  - "%CMD_IN_ENV% pip install gevent"
 
-#---------------------------------#
-#       build configuration       #
-#---------------------------------#
-
-
-
-
-# scripts to run before build
 before_build:
-  - cmd: choco install -y codecov
-  - cmd: refreshenv
-  - cmd: set PATH=%PATH%;C:\Miniconda3-x64;C:\Miniconda3-x64\Scripts
-  - cmd: cd c:\projects\nanodbc
-  - cmd: mkdir build
-  - cmd: cd build
-  - cmd: call "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x64
-  - cmd: call activate py35
-  - cmd: cmake --version
-  - cmd: cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%USERPROFILE% -DNANODBC_DISABLE_TESTS=ON ..
-  - cmd: cmake --build . --target install
-  
-  
-
-# to run your custom scripts instead of automatic MSBuild
-build_script:
-# Build Coverage Enabled version of Cyanodbc
-  - cmd: cd c:\projects\myproject
-  - cmd: mkdir build
-  - cmd: cd build
-  - cmd: cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%USERPROFILE%  -DCYANODBC_TARGET_PYTHON=3.5 -DCYANODBC_ENABLE_COVERAGE=ON ..
-  - cmd: cmake --build .
-# Build Production Version
-  - cmd: cd c:\projects\myproject
-  - cmd: mkdir buildprod
-  - cmd: cd buildprod
-  - cmd: cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%USERPROFILE%  -DCYANODBC_TARGET_PYTHON=3.5 -DCYANODBC_ENABLE_COVERAGE=OFF ..
-  - cmd: cmake --build .
-  - cmd: cd src\cython
-  - cmd: python setup.py bdist_wheel 
-  
-
-
-# scripts to run after build (working directory and environment changes are persisted from the previous steps)
-after_build:
-
-# scripts to run *after* solution is built and *before* automatic packaging occurs (web apps, NuGet packages, Azure Cloud Services)
-before_package:
-
-# to disable automatic builds
-#build: off
-
-#---------------------------------#
-#       tests configuration       #
-#---------------------------------#
-
-# scripts to run before tests (working directory and environment changes are persisted from the previous steps such as "before_build")
-before_test:
-
-  - cd C:\projects\myproject
-  
-
-#  - pip install C:\projects\myproject\build\src\python\dist\Cyanodbc-0.0.1-py3-none-any.whl
-
-
-# to run your custom scripts instead of automatic tests
-test_script:
-# Generate coverage.xml
-  - pip install -e c:\projects\myproject\build\src\cython
-  - pytest --cov=cyanodbc tests --cov-report=xml
-  - pip uninstall -y cyanodbc
-# Verify that the built production pacakge works
+  # win-iconv
+  - "powershell ci\\appveyor\\install-win-iconv.ps1"
+  # FreeTDS
+  - "rmdir /s /q freetds\\vs%VS_VER%_%PYTHON_ARCH% || cmd /c \"exit /b 0\""
+  - curl -L -o vs%VS_VER%_%PYTHON_ARCH%-%FREETDS_BRANCH%_withoutssl.zip %FREETDS_URL%
+  - 7z x -ofreetds vs%VS_VER%_%PYTHON_ARCH%-%FREETDS_BRANCH%_withoutssl.zip
+  - mv freetds/vs%VS_VER%_%PYTHON_ARCH%-%FREETDS_BRANCH% freetds/vs%VS_VER%_%PYTHON_ARCH%
+  # Add relevant FreeTDS DLLs dir to PATH envvar
+  - set PATH=%CD%\freetds\vs%VS_VER%_%PYTHON_ARCH%\lib;%CD%\freetds\vs%VS_VER%_%PYTHON_ARCH%\bin;%PATH%
+  # register ODBC driver
+  - "%WINDIR%\\SysWOW64\\regsvr32 /s freetds\\vs%VS_VER%_%PYTHON_ARCH%\\bin\\tdsodbc.dll || %WINDIR%\\system32\\regsvr32 /s freetds\\vs%VS_VER%_%PYTHON_ARCH%\\bin\\tdsodbc.dll"
   - ps: |
-      $cmd = "pip install " + (get-item C:\projects\myproject\buildprod\src\cython\dist\Cyanodbc*.whl).FullName
-      iex "& $cmd"
+        $sqliteodbc64Path = "c:\downloads\sqliteodbc_w64.exe"
+        $sqliteodbc32Path = "c:\downloads\sqliteodbc.exe"
+        if (-not (Test-Path c:\downloads -PathType Container)) {
+          New-Item -ItemType Directory -Path c:\downloads
+        }
+        if ($env:PYTHON_ARCH -eq 32) {
+          if (-not (Test-Path $sqliteodbc32Path -PathType Leaf)) {
+            Write-Host "Downloading 32-bit SQLite ODBC Driver" -ForegroundColor Magenta
+            (New-Object Net.WebClient).DownloadFile('http://www.ch-werner.de/sqliteodbc/sqliteodbc.exe', $sqliteodbc32Path)
+          }
+          Write-Host "Installing 32-bit SQLite ODBC Driver" -ForegroundColor Magenta
+          cmd /c start /wait $sqliteodbc32Path /S
+          if ($LastExitCode -ne 0) { $host.SetShouldExit($LastExitCode) }
+        } else {
+          if (-not (Test-Path $sqliteodbc64Path -PathType Leaf)) {
+            Write-Host "Downloading 64-bit SQLite ODBC Driver" -ForegroundColor Magenta
+            (New-Object Net.WebClient).DownloadFile('http://www.ch-werner.de/sqliteodbc/sqliteodbc_w64.exe', $sqliteodbc64Path)
+          }
+          Write-Host "Installing 64-bit SQLite ODBC Driver" -ForegroundColor Magenta
+          cmd /c start /wait $sqliteodbc64Path /S
+          if ($LastExitCode -ne 0) { $host.SetShouldExit($LastExitCode) }
+        }
+  # List ODBC available drivers
+  - ps: |
+      Write-Host "Installed ODBC drivers:" -ForegroundColor Magenta
+      Get-OdbcDriver -Platform 64-bit | Select-Object -ExpandProperty Name
 
-# scripts to run after tests
+build_script:
+  - echo %CD%
+  - cd build
+  - "%CMD_IN_ENV% cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%USERPROFILE% -DCYANODBC_TARGET_PYTHON=%PYTHON_VERSION% .."
+  - "%CMD_IN_ENV% cmake --build . -- -v"
+  - "%CMD_IN_ENV% pip install -e src\\cython"
+
+before_test:
+  - cd %APPVEYOR_BUILD_FOLDER%
+  # Add relevant OpenSSL DLLs dir to PATH envvar
+  - ps: |
+      if ($env:PYTHON_ARCH -eq 32) {
+        $env:PATH = $env:APPVEYOR_BUILD_FOLDER + "\openssl\bin;" + $env:PATH
+      } else {
+        $env:PATH = $env:APPVEYOR_BUILD_FOLDER + "\openssl\bin64;" + $env:PATH
+      }
+  # Start, reconfigure and restart SQL Server
+  - net start MSSQL$%INSTANCENAME%
+  - "powershell ci\\appveyor\\sql-server-activate-tcp-fixed-port.ps1"
+
+test_script:
+  - "%CMD_IN_ENV% python -m pytest --cov=cyanodbc tests --cov-report=xml"
+
 after_test:
-  - codecov -f coverage.xml
-
-
-# to disable automatic tests
-#test: off
-
-
-#---------------------------------#
-#      artifacts configuration    #
-#---------------------------------#
+  # If tests are successful, create binary packages for the project.
+  - "%CMD_IN_ENV% python build\\src\\cython\\setup.py bdist_wheel --plat-name %PY_PLATFORM%"
 
 artifacts:
+  - path: dist\*.whl
 
-  # pushing a single file
-  - path: buildprod\src\cython\dist\*.whl
-
-
-
-
-  #   # Deploy to GitHub Releases
-  # - provider: GitHub
-  #   artifact: /.*\.nupkg/           # upload all NuGet packages to release assets
-  #   draft: false
-  #   prerelease: false
-  #   on:
-  #     branch: master                # release from master branch only
-  #     appveyor_repo_tag: true       # deploy on tag push only
-
-
-# scripts to run before deployment
-before_deploy:
-
-# scripts to run after deployment
-after_deploy:
-
-# to run your custom scripts instead of provider deployments
-deploy_script:
-
-# to disable deployment
-#deploy: off
-
-
+on_success:
+  ps: |
+    if ($env:APPVEYOR_REPO_TAG -eq "true" -or $env:APPVEYOR_REPO_TAG -eq "True") {
+      If ($env:INSTANCENAME -eq "SQL2012SP1") {
+        # pip install twine --upgrade
+        # twine upload -u $env:PYPI_USERNAME -p $env:PYPI_PASSWORD  $env:APPVEYOR_BUILD_FOLDER\dist\*.whl
+      }
+    }
