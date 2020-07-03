@@ -76,6 +76,8 @@ before_build:
   - cmd: choco install -y codecov
   - cmd: refreshenv
   - cmd: set PATH=%PATH%;C:\Miniconda3-x64;C:\Miniconda3-x64\Scripts
+  - cmd: call "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x64
+  - cmd: call activate py35
 
 # to run your custom scripts instead of automatic MSBuild
 build_script:
