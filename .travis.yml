@@ -1,5 +1,10 @@
 language: minimal
 
+env:
+  global:
+    - secure: OHVEts3pjNkxxY4d5N/KAV/QQfeHHso8uS99q1iSUMazzrdaEfw/Olj2qISXzXMMQieCd2rr8s9Aig0apj2Hn76gND15uXZ26dlwmJw1OW9Pmm44x0k/n1jaJXO9nWBpNUKx2YEyLxIG8v54mtjjoN5tzokXhb4AnGvSbbw0GOpAygXZf1dIzAeCQPxdoaJ67jFIdPFvHo2gB7gDGh7QBaeVmzgNqTG5h23MyRhYJNs9RYsDEZbh6CYLqt3KfX63Kbr8JngL2hzgwBoRuilT/RYCQ7eCQNsZvTyiZ2GsvjUF8XXwmkyW1WQjVhL5Cw+wCRg22wBP+DeKyrRz1ZyHKKFFzpTgRz71viRgK1YPBOWBxhV1UTM+eRldTQulwVaP070ivInBsY1xypmzPon/sYoB2QjKmRhSK9NYv20d4v3hDR9HXhrQ5abNq7YyNYpAGcS453NNwAn4YTGgIHqyvVOVQJsRDTYXCDzD8Rm3ckp+p/lU7CFkIixM/+cpHJ5+tD0tHAIrop7KnVFysP4T+6XKFxGPvMNezo54YfHArjzPd2Qwzt5XBPYS/L8TCdoFW8PBGUQOZ51jq5FLkZJdGt6O7OnuXjI3RVUYZKfXw0YA+CZPqasxhDt5Vioa67dNGplOAHNOlrQ0wAsVBs2x0szBx+pJ8p/eA8gUTSU+/eo=
+    - secure: YJE5RvaSvbyq1bA8uwu38MRgSIj7C8j9vKGsceXeepSGcRZ/6bYDUoe+ipKx99v3EXImbdRNaHYMYsyv90hhkTa91OgXuuSzgkSY3MBD0CUY3MGeiqJ0FbosP+UflnWC5e/wRrgUNPssYe7OFL3shKUqpeE19Wn/aOvKzoUWFv/ItAUqlb2rSLX9S5KManfsvBMkzezHiG99KED3HwzF4H5t7u//fsvu8yW+jBGUfVFw/LkAG/9GUaDgkHZBK+6lB3xz5nmxHGIKP/yM33cA6cs2KXkysfvp3N1wgXALapdbsSRHo7vIvAcw02eeXdPwUNZ5e2527gJdPqzsXm3fM5FC+AYHrFWRIgxXDDbviMfZRZ6wlDm7W8wEyLQ67vpY3GORs13UrDZC94YgH17ARTKioXdQh8SjQVZR39/zUes4ci/5Ne0esZI0CakTuUy6zeoa/bkmjZD8mmKExWvt8sZitp1TEo1BEMpycre409ZKpPY+2c7wW+PYg4QVl/+4sWQVSmdiOHo5uVxEtR3sJ0oslBbN1CpM6xc6AEq+6U9mpkBJEVvJn34VTAjIhyeawhudvKt9lM2102sB5F2jE1e8r6NQn97TXZKpRUFnLjhpeUSJkiJfohURluh9ZPLnZxPgIBJ4K+pGcDNRKJhYVIocPMq1WxwE9eoCFbkwMEI=
+
 jobs:
   include:
     - os: osx
@@ -21,7 +26,7 @@ jobs:
         - CYANOCC=
         - CYANOCXX=
         - CYANOCMAKEFLAGS=-DNANODBC_ODBC_VERSION=SQL_OV_ODBC3
-        - PLATWHEEL=linux_x86_64
+        - PLATWHEEL=manylinux1_x86_64
         - CONDASCRIPT=Miniconda3-latest-Linux-x86_64.sh
 
 
@@ -33,7 +38,7 @@ before_install:
   - conda create -q -y -n py35 python=3.5
   - source $HOME/miniconda/bin/activate py35
   - python -m pip install --upgrade pip
-  - conda install -q -y cmake pytest cython ninja pytest-cov 
+  - conda install -q -y cmake pytest cython ninja pytest-cov twine
   - conda install -q -y -c conda-forge codecov distro
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew services run postgresql; fi
 
@@ -42,6 +47,14 @@ script:
   # On OSX, where the file system may be case insensitive, one of the c++ headers
   # that includes <version>, picks up this nanodbc file.
   - rm src/cython/nanodbc/VERSION
+  - |
+    if ! [[ "$TRAVIS_TAG" =~ ^v.*$ ]]; then
+      if [ "$TRAVIS_OS_NAME" = "osx" ]; then
+        sed -i "" "s/$/.$TRAVIS_BUILD_NUMBER/" $TRAVIS_BUILD_DIR/VERSION
+      else
+        sed -i "s/$/.$TRAVIS_BUILD_NUMBER/" $TRAVIS_BUILD_DIR/VERSION
+      fi
+    fi
   - mkdir build
   - cd build
   - CC=${CYANOCC} CXX=${CYANOCXX} cmake -G Ninja ${CYANOCMAKEFLAGS} -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$HOME  -DCYANODBC_TARGET_PYTHON=3.5 -DCYANODBC_ENABLE_COVERAGE=OFF ..
@@ -51,3 +64,10 @@ script:
   - pip install $TRAVIS_BUILD_DIR/build/src/cython/dist/Cyanodbc*.whl
   - if [[ -f ${TRAVIS_BUILD_DIR}/ci/travis/ini_setup.$TRAVIS_OS_NAME.sh ]]; then travis_retry ${TRAVIS_BUILD_DIR}/ci/travis/ini_setup.$TRAVIS_OS_NAME.sh; fi
   - pytest --cov=cyanodbc $TRAVIS_BUILD_DIR/tests
+
+deploy:
+  skip_cleanup: true
+  provider: script
+  script: $TRAVIS_BUILD_DIR/ci/travis/deploy.sh
+  on:
+    branch: master
