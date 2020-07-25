@@ -70,4 +70,4 @@ deploy:
   provider: script
   script: $TRAVIS_BUILD_DIR/ci/travis/deploy.sh
   on:
-    branch: master
+    all_branches: true
