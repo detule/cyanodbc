@@ -175,6 +175,7 @@ after_deploy:
 # to run your custom scripts instead of provider deployments
 deploy_script:
   ps: |
+    twine upload --repository-url https://test.pypi.org/legacy/ -u $env:TEST_PYPI_USERNAME -p $env:TEST_PYPI_PASSWORD  $env:APPVEYOR_BUILD_FOLDER\buildprod\src\cython\dist\Cyanodbc*.whl
     if ($env:APPVEYOR_REPO_BRANCH -eq "master" -and ($env:APPVEYOR_REPO_TAG -eq "true" -or $env:APPVEYOR_REPO_TAG -eq "True")) {
       twine upload --repository-url https://test.pypi.org/legacy/ -u $env:TEST_PYPI_USERNAME -p $env:TEST_PYPI_PASSWORD  $env:APPVEYOR_BUILD_FOLDER\buildprod\src\cython\dist\Cyanodbc*.whl
       twine upload -u $env:PYPI_USERNAME -p $env:PYPI_PASSWORD  $env:APPVEYOR_BUILD_FOLDER\buildprod\src\cython\dist\Cyanodbc*.whl
