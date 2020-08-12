@@ -1,5 +1,6 @@
 from setuptools import setup, find_packages
 from setuptools.dist import Distribution
+from setuptools.command.install import install
 
 # https://stackoverflow.com/questions/45150304/how-to-force-a-python-wheel-to-be-platform-specific-when-building-it
 class BinaryDistribution(Distribution):
@@ -7,10 +8,19 @@ class BinaryDistribution(Distribution):
     def has_ext_modules(self):
         return True
 
+# Don't copy the binary in purelib/
+# https://github.com/google/or-tools/issues/616
+class InstallPlatlib(install):
+    def finalize_options(self):
+        install.finalize_options(self)
+        if self.distribution.has_ext_modules():
+            self.install_lib = self.install_platlib
+
 setup(name='${PROJECT_NAME}',
       version='${CYANODBC_VERSION}',
       package_dir={ '': "." },
       package_data={'':['*.so', "*.pxd", "*.pyd"]},
       include_package_data=True,
       packages=find_packages(),
-      distclass = BinaryDistribution)
+      distclass = BinaryDistribution,
+      cmdclass = {"install": InstallPlatlib})
