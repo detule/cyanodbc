@@ -103,13 +103,13 @@ build_script:
   - cmd: mkdir build
   - cmd: cd build
   - cmd: cmake -G Ninja -DNANODBC_ODBC_VERSION=SQL_OV_ODBC3 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%USERPROFILE%  -DCYANODBC_TARGET_PYTHON=%PYTHONVER% -DCYANODBC_ENABLE_COVERAGE=ON ..
-  - cmd: cmake --build .
+  - cmd: cmake --build . -- -v
 # Build Production Version
   - cmd: cd c:\projects\myproject
   - cmd: mkdir buildprod
   - cmd: cd buildprod
   - cmd: cmake -G Ninja -DNANODBC_ODBC_VERSION=SQL_OV_ODBC3 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%USERPROFILE%  -DCYANODBC_TARGET_PYTHON=%PYTHONVER% -DCYANODBC_ENABLE_COVERAGE=OFF ..
-  - cmd: cmake --build .
+  - cmd: cmake --build . -- -v
   - cmd: cd src\cython
   - cmd: python setup.py bdist_wheel --plat-name win_amd64
 
